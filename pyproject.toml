@@ -1,8 +1,9 @@
 [project]
 name = "tinygraph"
-version = "0.1.0"
+versigton = "0.1.0"
 requires-python = ">=3.12"
-dependencies = [ "langgraph>=1.2.9", ]
+dependencies = [ "langgraph>=1.2.9", 
+"groq>=1.5.0", "python-dotenv>=1.2.2",]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
