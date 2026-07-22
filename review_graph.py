@@ -4,15 +4,25 @@ from code_graph import build_repo_graph, find_callers, get_function_source
 import os
 from dotenv import load_dotenv
 from groq import Groq
+from diff_parser import parse_diff, get_changed_functions
 
 load_dotenv()
 llm = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
 class AgentState(TypedDict):
     diff: str
-    changed_symbol: str
+    changed_symbol: NotRequired[str]
     context: NotRequired[str]
     review_comment: NotRequired[str]
+
+def parse_node(state: AgentState):
+    file_path, changed_lines = parse_diff(state['diff'])
+    changed_functions = get_changed_functions(file_path, changed_lines)
+    if changed_functions:
+        changed = changed_functions[0]  # Assuming only one function is changed for simplicity
+    else:
+        changed = ""
+    return {"changed_symbol": changed}
 
 def context_node(state: AgentState):
     call_graph, defined_in = build_repo_graph("sample_repo")
@@ -50,19 +60,20 @@ def agent_node(state: AgentState):
 
 workflow = StateGraph(AgentState)
 
+workflow.add_node("ParseNode", parse_node)
 workflow.add_node("ContextNode", context_node)
 workflow.add_node("AgentNode", agent_node)
 
-workflow.add_edge(START, "ContextNode")
+workflow.add_edge(START, "ParseNode")
+workflow.add_edge("ParseNode", "ContextNode")
 workflow.add_edge("ContextNode", "AgentNode")
 workflow.add_edge("AgentNode", END)
 
 app = workflow.compile()
 
 if __name__ == "__main__":
-    sample_diff = """ def divide(a, b):
-    return a / b
-"""
-    final_state = app.invoke({"diff": sample_diff, "changed_symbol": "divide"})
+    with open("sample.diff", "r") as f:
+        sample_diff = f.read()
+    final_state = app.invoke({"diff": sample_diff})
     print("Review Comment:", final_state.get("review_comment", "No comment generated."))
     print("Context:", final_state.get("context", "No context generated."))

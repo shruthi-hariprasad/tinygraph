@@ -44,6 +44,16 @@ def get_function_source(function_name, defined_in):
                 return ast.get_source_segment(source, node)
     return None
 
+def find_enclosing_function(file_path, line_number):
+    with open(file_path, 'r') as file:
+        source = file.read()
+        tree = ast.parse(source)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.FunctionDef):
+                if node.lineno <= line_number <= node.end_lineno:
+                    return node.name
+    return None
+
 if __name__ == "__main__":
     repo_path = "sample_repo"
     graph, defined_in = build_repo_graph(repo_path)
