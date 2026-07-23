@@ -11,6 +11,7 @@ load_dotenv()
 llm = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
 collection = build_semantic_index(repo_chunks("sample_repo"))
+call_graph, defined_in = build_repo_graph("sample_repo")
 
 class AgentState(TypedDict):
     diff: str
@@ -28,7 +29,6 @@ def parse_node(state: AgentState):
     return {"changed_symbol": changed}
 
 def context_node(state: AgentState):
-    call_graph, defined_in = build_repo_graph("sample_repo")
     changed_symbol = state.get('changed_symbol', '')
     context = f"CHANGED FUNCTION: {changed_symbol} (defined in {defined_in.get(changed_symbol, 'unknown file')})\n{get_function_source(changed_symbol, defined_in) or 'Source not found.'}\nCALLERS OF {changed_symbol}:\n"
     callers = find_callers(changed_symbol, call_graph)
@@ -68,7 +68,8 @@ def agent_node(state: AgentState):
     """
     response = llm.chat.completions.create(
         model="llama-3.3-70b-versatile",
-        messages=[{"role": "user", "content": prompt}])
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0.0)
     return {"review_comment": response.choices[0].message.content}
 
 workflow = StateGraph(AgentState)
