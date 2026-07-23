@@ -33,14 +33,14 @@ def build_semantic_index(chunks):
         )
     return collection
 
-def top_k_similar_functions(changed_function, collection, k=3):
-    query_text = collection.get(ids=[changed_function])
+def top_k_similar_functions(function_name, collection, k=3):
+    query_text = collection.get(ids=[function_name])
     if not query_text['documents']:
         return {"ids": [[]], "documents": [[]], "metadatas": [[]]}  # Return empty results if the function is not found
     embedding = model.encode(query_text['documents'][0]).tolist()
     results = collection.query(
         query_embeddings=[embedding],
-        n_results=k, where={"function_name": {"$ne": changed_function}}  # Exclude the changed function itself
+        n_results=k, where={"function_name": {"$ne": function_name}}  # Exclude the changed function itself
     )
     return results
 
