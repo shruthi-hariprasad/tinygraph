@@ -5,9 +5,12 @@ import os
 from dotenv import load_dotenv
 from groq import Groq
 from diff_parser import parse_diff, get_changed_functions
+from semantic_index import repo_chunks, build_semantic_index, top_k_similar_functions
 
 load_dotenv()
 llm = Groq(api_key=os.getenv("GROQ_API_KEY"))
+
+collection = build_semantic_index(repo_chunks("sample_repo"))
 
 class AgentState(TypedDict):
     diff: str
@@ -26,7 +29,7 @@ def parse_node(state: AgentState):
 
 def context_node(state: AgentState):
     call_graph, defined_in = build_repo_graph("sample_repo")
-    changed_symbol = state['changed_symbol']
+    changed_symbol = state.get('changed_symbol', '')
     context = f"CHANGED FUNCTION: {changed_symbol} (defined in {defined_in.get(changed_symbol, 'unknown file')})\n{get_function_source(changed_symbol, defined_in) or 'Source not found.'}\nCALLERS OF {changed_symbol}:\n"
     callers = find_callers(changed_symbol, call_graph)
     if not callers:
@@ -40,6 +43,16 @@ def context_node(state: AgentState):
             else:
                 context_sources.append(f"CALLER FUNCTION: {caller} (defined in {defined_in.get(caller, 'unknown file')})\nSource not found.")
         context += "\n\n".join(filter(None, context_sources))
+    
+    similar_functions = top_k_similar_functions(changed_symbol, collection, k=3)
+    context += "\n\nSIMILAR FUNCTIONS (from semantic index):\n"
+    names = similar_functions['ids'][0]
+    sources = similar_functions['documents'][0]
+    meta = similar_functions['metadatas'][0]
+    in_context = set(callers + [changed_symbol])
+    for name, source, metadata in zip(names, sources, meta):
+        if name not in in_context:
+            context += f"SIMILAR FUNCTION: {name} (defined in {metadata.get('filepath', 'unknown file')})\n{source}\n"
     return {"context": context}
 
 def agent_node(state: AgentState):

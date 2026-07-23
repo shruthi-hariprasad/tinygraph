@@ -9,7 +9,7 @@ def build_call_graph(file_path):
         tree = ast.parse(source)
         for node in ast.walk(tree):
             if isinstance(node, ast.FunctionDef):
-                defined_in[node.name] = file_path
+                defined_in[node.name] = str(file_path)
                 call_names[node.name] = []
                 for subnode in ast.walk(node):
                     if isinstance(subnode, ast.Call) and isinstance(subnode.func, ast.Name):
