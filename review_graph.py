@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 from groq import Groq
 from diff_parser import parse_diff, get_changed_functions
 from semantic_index import repo_chunks, build_semantic_index, top_k_similar_functions
+from eval_dataset import EVAL_CASES
 
 load_dotenv()
 llm = Groq(api_key=os.getenv("GROQ_API_KEY"))
@@ -65,6 +66,7 @@ def agent_node(state: AgentState):
     {state.get('context', '')}
 
     Please provide a review comment for this code change while considering impact on the callers shown, and reference functions by name when relevant.
+    If you find no grounded, specific concern, respond with exactly NO_ISSUES and nothing else. Do not invent minor stylistic suggestions.
     """
     response = llm.chat.completions.create(
         model="llama-3.3-70b-versatile",
@@ -72,22 +74,27 @@ def agent_node(state: AgentState):
         temperature=0.0)
     return {"review_comment": response.choices[0].message.content}
 
+def postprocess_node(state: AgentState):
+    return {"review_comment": "No grounded concerns found."} if state["review_comment"].strip() == "NO_ISSUES" else {"review_comment": state["review_comment"]}
+
 workflow = StateGraph(AgentState)
 
 workflow.add_node("ParseNode", parse_node)
 workflow.add_node("ContextNode", context_node)
 workflow.add_node("AgentNode", agent_node)
+workflow.add_node("PostProcessNode", postprocess_node)
 
 workflow.add_edge(START, "ParseNode")
 workflow.add_edge("ParseNode", "ContextNode")
 workflow.add_edge("ContextNode", "AgentNode")
-workflow.add_edge("AgentNode", END)
+workflow.add_edge("AgentNode", "PostProcessNode")
+workflow.add_edge("PostProcessNode", END)
 
 app = workflow.compile()
 
 if __name__ == "__main__":
-    with open("sample.diff", "r") as f:
-        sample_diff = f.read()
-    final_state = app.invoke({"diff": sample_diff})
-    print("Review Comment:", final_state.get("review_comment", "No comment generated."))
-    print("Context:", final_state.get("context", "No context generated."))
+    for i in [0,3]:
+        case = EVAL_CASES[i]
+        final_state = app.invoke({"diff": case["diff"]})
+        print("Review Comment:", final_state.get("review_comment", "No comment generated."))
+        print("Context:", final_state.get("context", "No context generated."))
